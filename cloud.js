@@ -18,7 +18,7 @@ export async function watchDays(uid, onDay, onError) {
   const m = await load(), { collection, onSnapshot } = m.fs;
   let ready = false;
   return onSnapshot(collection(m.db, "users", uid, "days"), (snap) => {
-    if (!ready) { ready = true; onDay("", null, snap.metadata.fromCache, snap.size + 1); }
+    if (!ready) { ready = true; onDay("", null, snap.metadata.fromCache, snap.docs.map((d) => d.id)); }
     snap.docChanges().forEach((c) => {
       if (c.doc.metadata.hasPendingWrites) return; // our own unsent write
       let day = null; try { day = JSON.parse(c.doc.data().json); } catch {}
