@@ -103,10 +103,25 @@ render();
 
 // ---- Google sign-in + sync ----
 const authBox = $("#auth");
+const copyUids = () => { const o = [], p = KEY + "-cloud-"; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(p)) o.push(k.slice(p.length)); } return o; };
 function paintAuth(user) {
+  const n = user ? 0 : copyUids().length;
   authBox.innerHTML = user
     ? `<span class="who">${esc(user.displayName || user.email || "Signed in")}</span> <button id="out" type="button">Sign out</button>`
-    : `<button id="in" type="button">Sign in with Google</button>`;
+    : `<button id="in" type="button">Sign in with Google</button>` + (n ? ` <button id="rm" type="button">Remove offline copies (${n})</button><small class="offnote">This device keeps a copy of account data for offline use until you remove it. It is not encrypted. Days with changes not yet synced are kept.</small>` : "");
+}
+// Removes only days identical to their last synced copy; unsynced days stay.
+function removeOffline() {
+  let left = 0;
+  for (const u of copyUids()) {
+    const k = KEY + "-cloud-" + u, bk = "planner-base-" + u;
+    let d = {}, b = {}; try { d = JSON.parse(localStorage.getItem(k)) || {}; } catch {} try { b = JSON.parse(localStorage.getItem(bk)) || {}; } catch {}
+    for (const day of Object.keys(d)) if (same(d[day], b[day])) { delete d[day]; delete b[day]; }
+    if (Object.keys(d).length) { left++; localStorage.setItem(k, JSON.stringify(d)); localStorage.setItem(bk, JSON.stringify(b)); }
+    else { localStorage.removeItem(k); localStorage.removeItem(bk); }
+  }
+  paintAuth(null);
+  setStatus(left ? `Removed synced copies. ${left} account(s) still have unsynced changes, kept.` : "Offline copies removed.");
 }
 async function startCloud() {
   try { cloud = cloud || await import("./cloud.js"); } catch (e) { setStatus("Sync unavailable (offline?). Saved on this device only."); return; }
@@ -148,6 +163,7 @@ async function startCloud() {
 authBox.addEventListener("click", async (e) => {
   if (e.target.id === "in") { await startCloud(); try { await cloud.signIn(); } catch (err) { setStatus("Sign-in failed: " + (err.code || err.message)); } }
   if (e.target.id === "out") { await cloud.signOut(); }
+  if (e.target.id === "rm") removeOffline();
 });
 paintAuth(null);
 if (localStorage.getItem("planner-cloud-on")) startCloud();
