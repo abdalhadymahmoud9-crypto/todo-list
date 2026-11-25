@@ -6,9 +6,10 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const todayStr = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
 // Storage: local only for now. A cloud backend would replace these two functions.
+let storeKey = KEY; // switches to a per-account cache key while signed in
 const store = {
-  load() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } },
-  save(d) { localStorage.setItem(KEY, JSON.stringify(d)); },
+  load() { try { return JSON.parse(localStorage.getItem(storeKey)) || {}; } catch { return {}; } },
+  save(d) { localStorage.setItem(storeKey, JSON.stringify(d)); },
 };
 let data = store.load(), date = todayStr();
 
@@ -20,7 +21,14 @@ if (!localStorage.getItem(MIGRATED)) {
   } catch {}
   localStorage.setItem(MIGRATED, "1");
 }
-const commit = (next) => { data = next; store.save(data); paintProgress(); };
+let cloud = null, uid = null, timers = {};
+const commit = (next) => { data = next; store.save(data); paintProgress(); queueCloud(date); };
+function queueCloud(d) {
+  if (!cloud || !uid) return;
+  const u = uid; clearTimeout(timers[d]); setStatus("Saving…");
+  timers[d] = setTimeout(() => cloud.saveDay(u, d, getDay(data, d)).then(() => setStatus("Synced to your account."), (e) => setStatus("Not synced: " + (e.code || e.message))), 500);
+}
+function setStatus(t) { $("#sync").textContent = t; }
 
 function paintWeekdays() {
   const w = weekdayIndex(date);
@@ -78,3 +86,37 @@ $("#next").onclick = () => go(shiftDate(date, 1));
 $("#today").onclick = () => go(todayStr());
 $("#date").onchange = (e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) go(e.target.value); };
 render();
+
+// ---- Google sign-in + sync ----
+const authBox = $("#auth");
+function paintAuth(user) {
+  authBox.innerHTML = user
+    ? `<span class="who">${esc(user.displayName || user.email || "Signed in")}</span> <button id="out" type="button">Sign out</button>`
+    : `<button id="in" type="button">Sign in with Google</button>`;
+}
+async function startCloud() {
+  try { cloud = cloud || await import("./cloud.js"); } catch (e) { setStatus("Sync unavailable (offline?). Saved on this device only."); return; }
+  let stop = null;
+  await cloud.watchAuth(async (user) => {
+    if (stop) { stop(); stop = null; }
+    for (const k in timers) clearTimeout(timers[k]);
+    paintAuth(user);
+    if (!user) { uid = null; storeKey = KEY; data = store.load(); render(); localStorage.removeItem("planner-cloud-on"); setStatus("Saved on this device only. Sign in to sync."); return; }
+    localStorage.setItem("planner-cloud-on", "1");
+    uid = user.uid; storeKey = KEY + "-cloud-" + uid; data = store.load(); render(); setStatus("Syncing…");
+    let first = true;
+    stop = await cloud.watchDays(uid, (d, day, cached) => {
+      if (day) { data = { ...data, [d]: day }; } else { const n = { ...data }; delete n[d]; data = n; }
+      store.save(data);
+      const typing = document.activeElement && document.activeElement.closest && document.activeElement.closest("main, .sheet") && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
+      if (d === date && !typing) render(); else paintProgress();
+      if (first) { first = false; setStatus(cached ? "Offline, showing saved copy." : "Synced to your account."); }
+    }, (e) => setStatus("Not synced: " + (e.code || e.message)));
+  });
+}
+authBox.addEventListener("click", async (e) => {
+  if (e.target.id === "in") { await startCloud(); try { await cloud.signIn(); } catch (err) { setStatus("Sign-in failed: " + (err.code || err.message)); } }
+  if (e.target.id === "out") { await cloud.signOut(); }
+});
+paintAuth(null);
+if (localStorage.getItem("planner-cloud-on")) startCloud();
