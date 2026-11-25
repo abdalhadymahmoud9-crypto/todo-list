@@ -23,14 +23,16 @@ function render() {
     cb.onchange = () => update(toggleTodo(todos, t.id));
     const span = document.createElement("span");
     span.textContent = t.text;
-    span.ondblclick = () => {
+    const edit = document.createElement("button");
+    edit.textContent = "Edit"; edit.ariaLabel = "Edit task"; edit.className = "edit";
+    edit.onclick = () => {
       const v = prompt("Edit task", t.text);
       if (v !== null) update(editTodo(todos, t.id, v));
     };
     const del = document.createElement("button");
     del.textContent = "✕"; del.ariaLabel = "Delete"; del.className = "del";
     del.onclick = () => update(removeTodo(todos, t.id));
-    li.append(cb, span, del);
+    li.append(cb, span, edit, del);
     listEl.append(li);
   }
   if (!shown.length) {
