@@ -106,7 +106,15 @@ async function startCloud() {
     uid = user.uid; storeKey = KEY + "-cloud-" + uid; data = store.load(); render(); setStatus("Syncing…");
     let first = true;
     stop = await cloud.watchDays(uid, (d, day, cached, ready) => {
-      if (ready) { setStatus(cached ? "Offline, showing saved copy." : "Synced to your account."); first = false; return; }
+      if (ready) {
+        first = false;
+        const accountDays = ready - 1; let dev = {}; try { dev = JSON.parse(localStorage.getItem(KEY)) || {}; } catch {}
+        const days = Object.keys(dev).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k));
+        if (!accountDays && days.length && !cached && confirm(`Your account is empty. Copy the ${days.length} saved day(s) from this device into it? (Device copy stays as it is.)`)) {
+          data = { ...dev }; store.save(data); days.forEach((k) => cloud.saveDay(uid, k, getDay(data, k))); render(); setStatus("Copied this device's days into your account.");
+        } else setStatus(cached ? "Offline, showing saved copy." : "Synced to your account.");
+        return;
+      }
       if (day) { data = { ...data, [d]: day }; } else { const n = { ...data }; delete n[d]; data = n; }
       store.save(data);
       const typing = document.activeElement && document.activeElement.closest && document.activeElement.closest("main, .sheet") && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
