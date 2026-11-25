@@ -1,3 +1,4 @@
+import { mergeDay } from "./planner-merge.js";
 import { HOURS, hourLabel, WEEKDAYS, getDay, setHour, setGoal, setNotes, addDayTodo, toggleDayTodo, removeDayTodo, migrateLegacy, dayProgress, weekdayIndex, shiftDate } from "./planner.js";
 
 const KEY = "daily-planner-v1", LEGACY = "todo-list-v1", MIGRATED = "daily-planner-migrated-v1";
@@ -21,14 +22,27 @@ if (!localStorage.getItem(MIGRATED)) {
   } catch {}
   localStorage.setItem(MIGRATED, "1");
 }
-let cloud = null, uid = null, timers = {};
+let cloud = null, uid = null, timers = {}, ver = {}, skipNote = "";
 const commit = (next) => { data = next; store.save(data); paintProgress(); queueCloud(date); };
+const BASEK = () => "planner-base-" + uid;
+const bases = () => { try { return JSON.parse(localStorage.getItem(BASEK())) || {}; } catch { return {}; } };
+const setBase = (d, day) => { const b = bases(); if (day) b[d] = day; else delete b[d]; localStorage.setItem(BASEK(), JSON.stringify(b)); };
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const typingNow = () => document.activeElement && document.activeElement.closest && document.activeElement.closest("main, .sheet") && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
 function queueCloud(d) {
   if (!cloud || !uid) return;
-  const u = uid; clearTimeout(timers[d]); setStatus("Saving…");
-  timers[d] = setTimeout(() => cloud.saveDay(u, d, getDay(data, d)).then(() => setStatus("Synced to your account."), (e) => setStatus("Not synced: " + (e.code || e.message))), 500);
+  const u = uid, v = (ver[d] = (ver[d] || 0) + 1); clearTimeout(timers[d]); setStatus("Saving…");
+  timers[d] = setTimeout(async () => {
+    try {
+      const r = await cloud.saveDay(u, d, getDay(data, d), bases()[d]);
+      if (u !== uid) return;
+      setBase(d, r.day);
+      if (ver[d] === v && !same(r.day, getDay(data, d))) { data = { ...data, [d]: r.day }; store.save(data); if (d === date && !typingNow()) render(); else paintProgress(); }
+      setStatus(r.conflicts ? `Merged with another device's changes. ${r.conflicts} edit(s) changed on both sides, both versions kept.` : "Synced to your account.");
+    } catch (e) { setStatus("Not synced: " + (e.code || e.message)); }
+  }, 500);
 }
-function setStatus(t) { $("#sync").textContent = t; }
+function setStatus(t) { $("#sync").textContent = t + (skipNote ? " " + skipNote : ""); }
 
 function paintWeekdays() {
   const w = weekdayIndex(date);
@@ -110,20 +124,23 @@ async function startCloud() {
         first = false;
         let dev = {}; try { dev = JSON.parse(localStorage.getItem(KEY)) || {}; } catch {}
         const IMP = "planner-imported-" + uid;
-        const add = Object.keys(dev).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k) && !ready.includes(k));
+        const devDays = Object.keys(dev).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k)), add = devDays.filter((k) => !ready.includes(k)), skipped = devDays.filter((k) => ready.includes(k));
+        if (skipped.length && !localStorage.getItem(IMP)) skipNote = `Not copied from this device (already on your account): ${skipped.sort().slice(0, 5).join(", ")}${skipped.length > 5 ? " +" + (skipped.length - 5) + " more" : ""}.`;
         if (add.length && !cached && !localStorage.getItem(IMP)) {
           localStorage.setItem(IMP, "1");
-          if (confirm(`Add ${add.length} day(s) saved on this device to your account?\nDays your account already has are NOT touched. This device's copy stays as it is.`)) {
-            data = { ...data }; add.forEach((k) => { data[k] = dev[k]; cloud.saveDay(uid, k, getDay(data, k)); }); store.save(data); render(); setStatus("Added this device's days to your account.");
+          if (confirm(`Add ${add.length} day(s) saved on this device to your account?\nDays your account already has are NOT touched and their device data is NOT copied${skipped.length ? ": " + skipped.length + " day(s) skipped" : ""}. This device's copy stays as it is.`)) {
+            data = { ...data }; add.forEach((k) => { data[k] = dev[k]; cloud.saveDay(uid, k, getDay(data, k)); }); store.save(data); render(); setStatus(`Added ${add.length} day(s) from this device.`);
             return;
           }
         }
         setStatus(cached ? "Offline, showing saved copy." : "Synced to your account."); return;
       }
-      if (day) { data = { ...data, [d]: day }; } else { const n = { ...data }; delete n[d]; data = n; }
-      store.save(data);
-      const typing = document.activeElement && document.activeElement.closest && document.activeElement.closest("main, .sheet") && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
-      if (d === date && !typing) render(); else paintProgress();
+      if (day) {
+        const loc = getDay(data, d), b = bases()[d], changed = data[d] && !same(loc, b || null);
+        if (changed && !same(loc, day)) { const r = mergeDay(b, loc, day); data = { ...data, [d]: r.day }; store.save(data); queueCloud(d); }
+        else { data = { ...data, [d]: day }; setBase(d, day); store.save(data); }
+      } else { const n = { ...data }; delete n[d]; data = n; setBase(d, null); store.save(data); }
+      if (d === date && !typingNow()) render(); else paintProgress();
       if (first) { first = false; setStatus(cached ? "Offline, showing saved copy." : "Synced to your account."); }
     }, (e) => setStatus("Not synced: " + (e.code || e.message)));
   });
