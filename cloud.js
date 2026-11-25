@@ -16,7 +16,9 @@ export async function signOut() { const m = await load(); await m.auth.signOut(m
 // Calls onDay(date, dayObj|null, fromServerOrOtherSession) for every remote change. Returns unsubscribe.
 export async function watchDays(uid, onDay, onError) {
   const m = await load(), { collection, onSnapshot } = m.fs;
+  let ready = false;
   return onSnapshot(collection(m.db, "users", uid, "days"), (snap) => {
+    if (!ready) { ready = true; onDay("", null, snap.metadata.fromCache, true); }
     snap.docChanges().forEach((c) => {
       if (c.doc.metadata.hasPendingWrites) return; // our own unsent write
       let day = null; try { day = JSON.parse(c.doc.data().json); } catch {}
