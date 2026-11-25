@@ -1,57 +1,80 @@
-// UI layer: reads/writes the DOM and localStorage, calls todo.js for all logic.
-import { addTodo, toggleTodo, editTodo, removeTodo, clearDone, filterTodos, remaining } from "./todo.js";
+import { HOURS, hourLabel, WEEKDAYS, getDay, setHour, setGoal, setNotes, addDayTodo, toggleDayTodo, removeDayTodo, migrateLegacy, dayProgress, weekdayIndex, shiftDate } from "./planner.js";
 
-const KEY = "todo-list-v1";
-const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
-let todos = load();
-let filter = "all";
-
+const KEY = "daily-planner-v1", LEGACY = "todo-list-v1", MIGRATED = "daily-planner-migrated-v1";
 const $ = (s) => document.querySelector(s);
-const listEl = $("#list"), form = $("#form"), input = $("#input"), countEl = $("#count");
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const todayStr = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
-function save() { localStorage.setItem(KEY, JSON.stringify(todos)); }
-function update(next) { todos = next; save(); render(); }
+// Storage: local only for now. A cloud backend would replace these two functions.
+const store = {
+  load() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } },
+  save(d) { localStorage.setItem(KEY, JSON.stringify(d)); },
+};
+let data = store.load(), date = todayStr();
 
+// One-time move of the old todo list's saved tasks into today's checklist. The old key is left untouched.
+if (!localStorage.getItem(MIGRATED)) {
+  try {
+    const old = JSON.parse(localStorage.getItem(LEGACY));
+    if (Array.isArray(old) && old.length) { data = migrateLegacy(data, date, old); store.save(data); }
+  } catch {}
+  localStorage.setItem(MIGRATED, "1");
+}
+const commit = (next) => { data = next; store.save(data); paintProgress(); };
+
+function paintWeekdays() {
+  const w = weekdayIndex(date);
+  $("#weekdays").innerHTML = WEEKDAYS.map((l, i) => `<span class="${i === w ? "on" : ""}" ${i === w ? 'aria-current="date"' : ""}>${l}</span>`).join("");
+}
+function paintProgress() {
+  const p = dayProgress(getDay(data, date));
+  const bits = [];
+  if (p.agendaTotal) bits.push(`agenda ${p.agendaDone}/${p.agendaTotal}`);
+  if (p.goalsTotal) bits.push(`goals ${p.goalsDone}/${p.goalsTotal}`);
+  if (p.todosTotal) bits.push(`tasks ${p.todosDone}/${p.todosTotal}`);
+  $("#progress").textContent = bits.length ? "Done: " + bits.join(" · ") : "Nothing planned yet.";
+}
 function render() {
-  listEl.innerHTML = "";
-  const shown = filterTodos(todos, filter);
-  for (const t of shown) {
-    const li = document.createElement("li");
-    li.className = t.done ? "done" : "";
-    const cb = document.createElement("input");
-    cb.type = "checkbox"; cb.checked = t.done; cb.ariaLabel = "Mark done";
-    cb.onchange = () => update(toggleTodo(todos, t.id));
-    const span = document.createElement("span");
-    span.textContent = t.text;
-    const edit = document.createElement("button");
-    edit.textContent = "Edit"; edit.ariaLabel = "Edit task"; edit.className = "edit";
-    edit.onclick = () => {
-      const v = prompt("Edit task", t.text);
-      if (v !== null) update(editTodo(todos, t.id, v));
-    };
-    const del = document.createElement("button");
-    del.textContent = "✕"; del.ariaLabel = "Delete"; del.className = "del";
-    del.onclick = () => update(removeTodo(todos, t.id));
-    li.append(cb, span, edit, del);
-    listEl.append(li);
-  }
-  if (!shown.length) {
-    const li = document.createElement("li");
-    li.className = "empty"; li.textContent = "Nothing here yet.";
-    listEl.append(li);
-  }
-  const n = remaining(todos);
-  countEl.textContent = `${n} task${n === 1 ? "" : "s"} left`;
-  document.querySelectorAll("[data-filter]").forEach((b) =>
-    b.classList.toggle("active", b.dataset.filter === filter));
+  const day = getDay(data, date), nowH = date === todayStr() ? new Date().getHours() : -1;
+  $("#date").value = date; paintWeekdays();
+  $("#hours").innerHTML = HOURS.map((h) => {
+    const s = day.hours[h] || { text: "", done: false };
+    return `<li data-h="${h}" class="${s.done ? "done" : ""} ${h === nowH ? "now" : ""}"><time>${hourLabel(h)}</time><label class="hit"><input class="box" type="checkbox" ${s.done ? "checked" : ""} aria-label="${hourLabel(h)} done"></label><input type="text" value="${esc(s.text)}" maxlength="200" aria-label="Activity at ${hourLabel(h)}"></li>`;
+  }).join("");
+  $("#goals").innerHTML = day.goals.map((g, i) =>
+    `<li data-i="${i}" class="${g.done ? "gdone" : ""}"><label class="hit"><input class="dot" type="checkbox" ${g.done ? "checked" : ""} aria-label="Goal ${i + 1} done"></label><input type="text" value="${esc(g.text)}" maxlength="120" placeholder="Goal ${i + 1}" aria-label="Goal ${i + 1}"></li>`).join("");
+  $("#todos").innerHTML = day.todos.map((t) =>
+    `<li data-id="${esc(t.id)}" class="${t.done ? "done" : ""}"><label class="hit"><input class="box" type="checkbox" ${t.done ? "checked" : ""} aria-label="Done: ${esc(t.text)}"></label><span>${esc(t.text)}</span><button class="x" aria-label="Delete ${esc(t.text)}">✕</button></li>`).join("") || "<li class='none'>No tasks for this day.</li>";
+  $("#notes").value = day.notes;
+  paintProgress();
 }
 
-form.onsubmit = (e) => {
+$("#hours").addEventListener("input", (e) => {
+  const li = e.target.closest("li"); if (!li) return;
+  const h = Number(li.dataset.h);
+  if (e.target.type === "checkbox") { commit(setHour(data, date, h, { done: e.target.checked })); li.classList.toggle("done", e.target.checked); }
+  else commit(setHour(data, date, h, { text: e.target.value }));
+});
+$("#goals").addEventListener("input", (e) => {
+  const li = e.target.closest("li"); if (!li) return;
+  const i = Number(li.dataset.i);
+  if (e.target.type === "checkbox") { commit(setGoal(data, date, i, { done: e.target.checked })); li.classList.toggle("gdone", e.target.checked); }
+  else commit(setGoal(data, date, i, { text: e.target.value }));
+});
+$("#notes").addEventListener("input", (e) => commit(setNotes(data, date, e.target.value)));
+$("#addtodo").onsubmit = (e) => {
   e.preventDefault();
-  if (!input.value.trim()) return;
-  update(addTodo(todos, input.value));
-  input.value = "";
+  try { commit(addDayTodo(data, date, $("#newtodo").value)); $("#newtodo").value = ""; $("#err").textContent = ""; render(); $("#newtodo").focus(); }
+  catch (err) { $("#err").textContent = err.message; }
 };
-document.querySelectorAll("[data-filter]").forEach((b) => (b.onclick = () => { filter = b.dataset.filter; render(); }));
-$("#clear").onclick = () => update(clearDone(todos));
+$("#todos").addEventListener("click", (e) => {
+  const li = e.target.closest("li[data-id]"); if (!li) return;
+  if (e.target.matches(".x")) { commit(removeDayTodo(data, date, li.dataset.id)); render(); }
+  else if (e.target.matches(".box")) { commit(toggleDayTodo(data, date, li.dataset.id)); render(); }
+});
+const go = (d) => { date = d; render(); };
+$("#prev").onclick = () => go(shiftDate(date, -1));
+$("#next").onclick = () => go(shiftDate(date, 1));
+$("#today").onclick = () => go(todayStr());
+$("#date").onchange = (e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) go(e.target.value); };
 render();
