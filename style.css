@@ -59,3 +59,4 @@ footer{margin-top:20px;color:var(--sage-d);font-size:.85rem}
 @media(max-width:760px){main{grid-template-columns:1fr}.head,#hours li{grid-template-columns:74px 44px 1fr}#hours time{letter-spacing:.02em}header{margin-bottom:16px}}
 
 .auth{margin:8px 0;font-size:.9rem}.auth button{font:inherit;padding:8px 14px;min-height:40px;border-radius:999px;border:1px solid var(--sage-d);background:transparent;color:inherit;cursor:pointer}.auth .who{margin-right:8px}
+.auth .offnote{display:block;margin-top:6px;font-size:.78rem;opacity:.8;line-height:1.4}
