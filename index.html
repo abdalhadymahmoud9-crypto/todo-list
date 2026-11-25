@@ -1,27 +1,48 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Todo List</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Daily Planner</title><meta name="theme-color" content="#fdf6ec">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="sheet">
+  <header>
+    <h1>Daily<br>Planner</h1>
+    <div class="when">
+      <div class="datebar">
+        <button id="prev" aria-label="Previous day">‹</button>
+        <label class="datelabel">date <input id="date" type="date" aria-label="Date"></label>
+        <button id="next" aria-label="Next day">›</button>
+        <button id="today" class="today">Today</button>
+      </div>
+      <div class="weekdays" id="weekdays" aria-label="Day of the week"></div>
+      <p id="progress" class="progress" aria-live="polite"></p>
+    </div>
+  </header>
   <main>
-    <h1>Todo List</h1>
-    <form id="form">
-      <input id="input" placeholder="What needs doing?" autocomplete="off" aria-label="New task">
-      <button type="submit">Add</button>
-    </form>
-    <nav>
-      <button data-filter="all" class="active">All</button>
-      <button data-filter="active">Active</button>
-      <button data-filter="done">Done</button>
-    </nav>
-    <ul id="list"></ul>
-    <footer><span id="count"></span><button id="clear">Clear done</button></footer>
-    <p class="hint">Saved in your browser.</p>
+    <section class="agenda" aria-label="Hourly agenda">
+      <div class="head"><span class="pill">Time</span><span class="pill tick">✓</span><span class="pill act">Activity</span></div>
+      <ol id="hours"></ol>
+    </section>
+    <aside>
+      <section>
+        <h2 class="pill wide">Today's goal</h2>
+        <ol id="goals" class="goals"></ol>
+      </section>
+      <section>
+        <h2 class="pill wide">To-do lists</h2>
+        <form id="addtodo"><input id="newtodo" placeholder="Add a task" maxlength="200" aria-label="New task"><button aria-label="Add task">+</button></form>
+        <p id="err" class="err" role="alert"></p>
+        <ul id="todos" class="todos"></ul>
+      </section>
+      <section class="notes">
+        <h2 class="pill">Notes</h2>
+        <textarea id="notes" maxlength="2000" aria-label="Notes" placeholder="Write anything for the day"></textarea>
+      </section>
+    </aside>
   </main>
-  <script type="module" src="app.js"></script>
-</body>
-</html>
+  <footer><p id="sync">Saved on this device only. No account yet.</p></footer>
+</div>
+<script type="module" src="app.js"></script>
+</body></html>
