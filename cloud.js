@@ -1,6 +1,7 @@
 // Firebase Auth (Google) + Firestore. Data lives at users/{uid}/days/{YYYY-MM-DD}.
 // Security is enforced by Firestore rules (only the signed-in owner can read or write), not by this code.
 import { firebaseConfig } from "./firebase-config.js";
+import { mergeDay } from "./planner-merge.js";
 const V = "11.0.2", B = `https://www.gstatic.com/firebasejs/${V}/`;
 let mods;
 async function load() {
@@ -26,9 +27,16 @@ export async function watchDays(uid, onDay, onError) {
     });
   }, onError);
 }
-export async function saveDay(uid, date, day) {
-  const m = await load(), { doc, setDoc } = m.fs;
-  await setDoc(doc(m.db, "users", uid, "days", date), { json: JSON.stringify(day), updatedAt: Date.now() });
+// Saves with a transaction: reads the account copy of the day and merges before writing, so another device's edits are never overwritten.
+export async function saveDay(uid, date, day, base) {
+  const m = await load(), { doc, runTransaction } = m.fs, ref = doc(m.db, "users", uid, "days", date);
+  return runTransaction(m.db, async (tx) => {
+    const snap = await tx.get(ref); let remote = null;
+    if (snap.exists()) { try { remote = JSON.parse(snap.data().json); } catch {} }
+    const r = remote ? mergeDay(base, day, remote) : { day, conflicts: 0 };
+    tx.set(ref, { json: JSON.stringify(r.day), updatedAt: Date.now() });
+    return r;
+  });
 }
 export async function probeOther(uid) { // used by isolation tests: try reading another user's data
   const m = await load(), { collection, getDocs } = m.fs;
