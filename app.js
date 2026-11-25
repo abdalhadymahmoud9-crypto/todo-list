@@ -108,12 +108,17 @@ async function startCloud() {
     stop = await cloud.watchDays(uid, (d, day, cached, ready) => {
       if (ready) {
         first = false;
-        const accountDays = ready - 1; let dev = {}; try { dev = JSON.parse(localStorage.getItem(KEY)) || {}; } catch {}
-        const days = Object.keys(dev).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k));
-        if (!accountDays && days.length && !cached && confirm(`Your account is empty. Copy the ${days.length} saved day(s) from this device into it? (Device copy stays as it is.)`)) {
-          data = { ...dev }; store.save(data); days.forEach((k) => cloud.saveDay(uid, k, getDay(data, k))); render(); setStatus("Copied this device's days into your account.");
-        } else setStatus(cached ? "Offline, showing saved copy." : "Synced to your account.");
-        return;
+        let dev = {}; try { dev = JSON.parse(localStorage.getItem(KEY)) || {}; } catch {}
+        const IMP = "planner-imported-" + uid;
+        const add = Object.keys(dev).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k) && !ready.includes(k));
+        if (add.length && !cached && !localStorage.getItem(IMP)) {
+          localStorage.setItem(IMP, "1");
+          if (confirm(`Add ${add.length} day(s) saved on this device to your account?\nDays your account already has are NOT touched. This device's copy stays as it is.`)) {
+            data = { ...data }; add.forEach((k) => { data[k] = dev[k]; cloud.saveDay(uid, k, getDay(data, k)); }); store.save(data); render(); setStatus("Added this device's days to your account.");
+            return;
+          }
+        }
+        setStatus(cached ? "Offline, showing saved copy." : "Synced to your account."); return;
       }
       if (day) { data = { ...data, [d]: day }; } else { const n = { ...data }; delete n[d]; data = n; }
       store.save(data);
