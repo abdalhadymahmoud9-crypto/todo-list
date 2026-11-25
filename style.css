@@ -49,7 +49,7 @@ li.gdone input[type=text]{text-decoration:line-through;color:#7a8a7e}
 .todos li.done span{text-decoration:line-through;color:#7a8a7e}
 .todos .x{background:transparent;border:0;color:var(--sage-d);min-height:44px;font-size:1rem;cursor:pointer}
 .todos .box{width:20px;height:20px;border-radius:3px}
-.none{color:#7a8a7e;padding:10px 0;display:block}
+.todos li.none{color:#7a8a7e;padding:10px 0;display:block;grid-template-columns:none;min-height:0;border-bottom:0}
 .notes{background:var(--sage);border-radius:28px;padding:16px 18px 20px}
 .notes .pill{background:var(--paper);color:var(--sage);display:block;width:max-content;margin:0 auto 8px}
 .notes textarea{width:100%;min-height:180px;border:0;background:repeating-linear-gradient(transparent 0 33px,rgba(255,255,255,.55) 33px 34px);color:#fff;line-height:34px;resize:vertical;padding:0 2px;outline-offset:4px}
