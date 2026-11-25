@@ -17,4 +17,4 @@ Open `index.html` through any static server, for example `python3 -m http.server
 Due dates, categories, drag to reorder, dark mode, sync with a backend.
 
 ## Credits
-Built with AI assistance (an AI assistant wrote the first version for the owner of this repository, who reviews, runs and extends it).
+Built with AI assistance.
