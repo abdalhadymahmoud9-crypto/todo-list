@@ -105,7 +105,8 @@ async function startCloud() {
     localStorage.setItem("planner-cloud-on", "1");
     uid = user.uid; storeKey = KEY + "-cloud-" + uid; data = store.load(); render(); setStatus("Syncing…");
     let first = true;
-    stop = await cloud.watchDays(uid, (d, day, cached) => {
+    stop = await cloud.watchDays(uid, (d, day, cached, ready) => {
+      if (ready) { setStatus(cached ? "Offline, showing saved copy." : "Synced to your account."); first = false; return; }
       if (day) { data = { ...data, [d]: day }; } else { const n = { ...data }; delete n[d]; data = n; }
       store.save(data);
       const typing = document.activeElement && document.activeElement.closest && document.activeElement.closest("main, .sheet") && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
